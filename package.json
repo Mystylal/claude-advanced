@@ -1,0 +1,21 @@
+{
+  "name": "course-claude",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace web",
+    "dev:api": "npm run start:dev --workspace api",
+    "build:web": "npm run build --workspace web",
+    "build:api": "npm run build --workspace api",
+    "build": "npm run build:web && npm run build:api",
+    "lint:web": "npm run lint --workspace web",
+    "lint:api": "npm run lint --workspace api",
+    "lint": "npm run lint:web && npm run lint:api",
+    "format:web": "npm run format --workspace web",
+    "format:api": "npm run format --workspace api",
+    "format": "npm run format:web && npm run format:api",
+    "test:api": "npm run test --workspace api"
+  }
+}
