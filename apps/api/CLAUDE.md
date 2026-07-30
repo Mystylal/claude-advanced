@@ -17,19 +17,53 @@ npm run build           # nest build
 npm run lint            # eslint --fix over src, apps, libs, test
 npm run format          # prettier --write over src and test
 
-npm test                # jest unit tests (*.spec.ts, rootDir: src)
+npm test                # jest unit tests (*.spec.ts, rootDir: src) — none exist yet (passWithNoTests: true), add one alongside the first unit-testable module
 npm run test:watch
 npm run test:cov
 npm run test:debug
 npm run test:e2e        # jest -c test/jest-e2e.json (*.e2e-spec.ts)
 ```
 
-To run a single unit test: `npx jest app.controller` (Jest `rootDir` is `src`, matches `*.spec.ts`). For a single e2e test: `npx jest --config ./test/jest-e2e.json app.e2e-spec`.
+To run a single unit test (once one exists): `npx jest <name>` (Jest `rootDir` is `src`, matches `*.spec.ts`). For a single e2e test: `npx jest --config ./test/jest-e2e.json auth.e2e-spec`.
+
+### Database (Prisma + Postgres)
+
+```bash
+docker compose up -d           # from repo root: starts Postgres (see root CLAUDE.md re: port 5433)
+npx prisma migrate dev         # apply/create migrations against the local DB
+npx prisma generate            # regenerate the Prisma Client (also runs as part of migrate dev)
+```
+
+Requires `apps/api/.env` (gitignored; see `.env.example`) with `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`.
+
+Prisma is v7, which changed how the CLI and client get their connection info compared to earlier versions:
+
+- The connection URL is **not** in `prisma/schema.prisma` (a bare `url` in the `datasource` block is rejected). It lives in `prisma.config.ts` at the app root, loaded via `datasource: { url: env('DATABASE_URL') }`.
+- `PrismaClient` requires an explicit driver adapter rather than reading `DATABASE_URL` itself — `src/prisma/prisma.service.ts` constructs one with `@prisma/adapter-pg`'s `PrismaPg`, using `ConfigService` for the connection string.
 
 ## Architecture
 
-- Standard Nest module structure: `src/main.ts` bootstraps via `NestFactory.create(AppModule)` and listens on `process.env.PORT ?? 3000`.
-- `src/app.module.ts` is the root module wiring `AppController` + `AppService`. Currently the unmodified `@nestjs/cli` scaffold — add new features as their own modules rather than growing `AppModule`.
+- Standard Nest module structure: `src/main.ts` bootstraps via `NestFactory.create(AppModule)`, enables CORS (`app.enableCors()`, permissive default — needed so `apps/web`'s browser-side `fetch` calls aren't blocked in dev), applies a global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`), and listens on `process.env.PORT ?? 3000`.
+- `src/app.module.ts` wires `ConfigModule` (global), `PrismaModule`, `UsersModule`, `AuthModule`, `MeetingsModule`. There is no root controller/service (the `create-nest-app` scaffold `AppController`/`AppService` was removed once real feature modules existed) — add further features as their own modules rather than growing `AppModule`.
+- `src/prisma/` — `PrismaModule` (global) + `PrismaService` (extends `PrismaClient`, connects/disconnects on module init/destroy). Inject `PrismaService` wherever DB access is needed.
+- `src/users/` — CQRS (`@nestjs/cqrs`), owns the `User` Prisma model exclusively; no other module touches `prisma.user` directly. No controller — it's consumed only via `CommandBus`/`QueryBus`, not imported by other modules' TS code.
+  - `commands/impl/create-user.command.ts` + `commands/handlers/create-user.handler.ts` — `CreateUserCommand` creates a user with a bcrypt-hashed password, 409 (`ConflictException`) on duplicate email, returns the full `UserRecord`.
+  - `queries/impl/find-user-by-email.query.ts` + `queries/handlers/find-user-by-email.handler.ts` — `FindUserByEmailQuery` returns the `UserRecord` (including the hashed password) or `null`; it does not do any credential checking itself.
+  - `interfaces/user-record.interface.ts` — shared `UserRecord` (`{ id, email, password, createdAt }`) return type for both handlers.
+- `src/auth/` — CQRS (`@nestjs/cqrs`), not a plain service. `AuthModule` imports `CqrsModule` and `JwtModule` (secret/expiry from `ConfigService`, env vars `JWT_SECRET`/`JWT_EXPIRES_IN`); `AuthController` only depends on `CommandBus`/`QueryBus`, it holds no business logic. Auth owns token generation/verification and credential checking; it never touches Prisma or the `User` model directly — it talks to `src/users/` only through `CommandBus`/`QueryBus` (cross-module CQRS dispatch, not a direct module import), which is why `AuthModule` doesn't import `UsersModule`.
+  - `commands/impl/register.command.ts` + `commands/handlers/register.handler.ts` — `RegisterCommand` dispatched by `POST /auth/register`; the `@CommandHandler` dispatches `CreateUserCommand` (via the injected `CommandBus`) to create the user, then signs and returns `{ accessToken }`.
+  - `queries/impl/login.query.ts` + `queries/handlers/login.handler.ts` — `LoginQuery` dispatched by `POST /auth/login` (200); the `@QueryHandler` dispatches `FindUserByEmailQuery` (via the injected `QueryBus`), bcrypt-compares the password itself, 401 (`UnauthorizedException`) on any invalid credential, returns `{ accessToken }`. It never creates a user.
+  - `interfaces/auth-result.interface.ts` — shared `AuthResult` (`{ accessToken: string }`) return type for both handlers.
+  - New commands/queries follow the same `impl/` + `handlers/` split and get registered in the owning module's `providers` array; don't reintroduce a service layer for either module.
+  - `AuthModule` exports `JwtModule` so other feature modules can reuse the same configured `JwtService` (see `MeetingsModule` below) instead of redeclaring `JWT_SECRET`/`JWT_EXPIRES_IN` wiring.
+  - `guards/jwt-auth.guard.ts` — `JwtAuthGuard` (plain `CanActivate`, no Passport) reads the `Authorization: Bearer <token>` header, verifies it via `JwtService`, and attaches `{ userId, email }` to `request.user` (401 on missing/invalid token). `interfaces/authenticated-request.interface.ts` types that augmented request (`AuthenticatedRequest`/`AuthenticatedUser`).
+- `src/meetings/` — CQRS, same shape as `src/auth/`. `MeetingsModule` imports `CqrsModule` and `AuthModule` (for the shared `JwtService`/`JwtAuthGuard`). `MeetingsController` is guarded by `JwtAuthGuard` at the class level and only depends on `CommandBus`/`QueryBus`; it reads the caller's id off `request.user.userId`.
+  - `commands/impl/create-meeting.command.ts` + `commands/handlers/create-meeting.handler.ts` — dispatched by `POST /meetings` (`title`, `date`, `participants[]` via `CreateMeetingDto`), creates a `Meeting` owned by the current user.
+  - `queries/impl/list-meetings.query.ts` + `queries/handlers/list-meetings.handler.ts` — dispatched by `GET /meetings`, returns only meetings owned by the current user.
+  - `queries/impl/get-meeting.query.ts` + `queries/handlers/get-meeting.handler.ts` — dispatched by `GET /meetings/:id`, scoped to the current user's own meetings; 404 (`NotFoundException`) if the id doesn't exist or belongs to another user.
+  - `interfaces/meeting-result.interface.ts` — shared `MeetingResult` return type for all three handlers.
+  - Prisma `Meeting` model (`prisma/schema.prisma`): `id`, `title`, `date`, `participants String[]`, `ownerId` (FK to `User`), `createdAt`.
+- `test/auth.e2e-spec.ts` and `test/meetings.e2e-spec.ts` (the only e2e suites — the scaffold `test/app.e2e-spec.ts` was removed along with `AppController`) drive these endpoints end-to-end over a real `AppModule` + the Postgres instance from `docker-compose.yml`; they generate a unique email per test (`crypto.randomUUID()`) instead of resetting the DB between runs, so tests stay independent without needing DB-reset plumbing.
 - `nest-cli.json` sets `sourceRoot: src` and `deleteOutDir: true` (build output goes to `dist/`, cleaned on each build).
 - `eslint.config.mjs` is a flat config using `typescript-eslint` `recommendedTypeChecked` plus `eslint-plugin-prettier/recommended`, so `npm run lint` (`--fix`) also applies Prettier formatting — `npm run format` is only needed for a formatting-only pass. `@typescript-eslint/no-explicit-any` is disabled; `no-floating-promises` / `no-unsafe-argument` are downgraded to warnings.
 - TypeScript strict mode is enabled (`tsconfig.json`).
