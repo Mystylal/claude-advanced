@@ -45,7 +45,7 @@ To run a single test, a single lint target, or any other per-app script not expo
 
 - Package manager is npm (workspaces), not pnpm/yarn — deliberate choice, do not add a second lockfile or switch tooling without discussion.
 - Each app owns its own ESLint + Prettier config rather than a shared root config; keep it that way when editing lint rules.
-- Husky is installed at the root (`.husky/pre-commit`) and runs `npm run lint` and `npm run test:api` on every commit. It does not run `test:e2e:api` since that needs `docker compose up -d` first.
+- Husky is installed at the root. `.husky/pre-commit` runs `lint-staged` (eslint --fix on staged files, scoped per workspace via `.lintstagedrc.js`) and `npm run test:e2e:api` — the latter needs `docker compose up -d` running first. `.husky/pre-push` runs the full `npm run lint` across both workspaces.
 
 ## Keeping documentation current
 

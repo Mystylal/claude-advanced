@@ -1,2 +1,2 @@
-npm run lint
-npm run test:api
+npx lint-staged
+npm run test:e2e:api
