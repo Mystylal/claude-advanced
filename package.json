@@ -16,6 +16,7 @@
     "format:web": "npm run format --workspace web",
     "format:api": "npm run format --workspace api",
     "format": "npm run format:web && npm run format:api",
-    "test:api": "npm run test --workspace api"
+    "test:api": "npm run test --workspace api",
+    "test:e2e:api": "npm run test:e2e --workspace api"
   }
 }

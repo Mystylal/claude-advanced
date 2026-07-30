@@ -9,7 +9,9 @@ This is an npm workspaces monorepo with two independent apps, each a standalone 
 - `apps/web` — Next.js 16 (App Router, TypeScript, Turbopack) frontend. See `apps/web/CLAUDE.md`.
 - `apps/api` — NestJS 11 (TypeScript) backend. See `apps/api/CLAUDE.md`.
 
-There is no shared `packages/` code and no Turborepo/Nx — orchestration is plain `npm --workspace` scripts defined in the root `package.json`. Both apps currently contain only their default framework scaffolds (no custom features yet).
+There is no shared `packages/` code and no Turborepo/Nx — orchestration is plain `npm --workspace` scripts defined in the root `package.json`. `apps/web` is still the unmodified `create-next-app` route/page scaffold but now has Tailwind CSS v4 + HeroUI wired up for styling (see `apps/web/CLAUDE.md`); `apps/api` has a first feature (auth) — see `apps/api/CLAUDE.md`.
+
+A root `docker-compose.yml` runs a local Postgres 16 instance used by `apps/api` (Prisma). Start it with `docker compose up -d` before running the API or its tests. It publishes the container's port 5432 on host port **5433**, not 5432 — a native Postgres install on the host machine already owns 5432/localhost, so the compose file was changed to avoid that collision. Point `DATABASE_URL` at port 5433 accordingly.
 
 ## Commands
 
@@ -34,6 +36,7 @@ npm run format:web
 npm run format:api
 
 npm run test:api         # jest unit tests for apps/api (apps/web has no tests yet)
+npm run test:e2e:api     # jest e2e tests for apps/api (test/*.e2e-spec.ts) — needs `docker compose up -d` first, see below
 ```
 
 To run a single test, a single lint target, or any other per-app script not exposed at the root, `cd` into the app and use its own `package.json` scripts directly (see `apps/web/CLAUDE.md` / `apps/api/CLAUDE.md`).
