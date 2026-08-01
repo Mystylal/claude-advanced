@@ -27,6 +27,10 @@ import { clearSession, getToken } from '@/lib/auth';
 const ACCEPTED_FILE_TYPES =
   'audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv';
 
+// Mirrors the API's MAX_FILE_SIZE_BYTES (apps/api/src/meeting-files/config/file-upload.constants.ts):
+// rejecting oversized files before the request avoids uploading the whole thing just to get a 413.
+const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleString(undefined, {
     dateStyle: 'medium',
@@ -198,13 +202,11 @@ function FileTypeIcon({ mimeType }: { mimeType: string }) {
 
 function FileRow({
   file,
-  canDelete,
   isDeleting,
   onDownload,
   onDelete,
 }: {
   file: MeetingFile;
-  canDelete: boolean;
   isDeleting: boolean;
   onDownload: (file: MeetingFile) => void;
   onDelete: (file: MeetingFile) => void;
@@ -240,18 +242,18 @@ function FileRow({
         >
           <DownloadIcon />
         </Button>
-        {canDelete ? (
-          <Button
-            variant="danger-soft"
-            size="sm"
-            isIconOnly
-            isDisabled={isDeleting}
-            aria-label={`Delete ${file.name}`}
-            onPress={() => onDelete(file)}
-          >
-            <TrashIcon />
-          </Button>
-        ) : null}
+        {/* getMeeting (see MeetingView) only resolves for the meeting's owner, so
+            anyone who reaches this row is already allowed to delete it. */}
+        <Button
+          variant="danger-soft"
+          size="sm"
+          isIconOnly
+          isDisabled={isDeleting}
+          aria-label={`Delete ${file.name}`}
+          onPress={() => onDelete(file)}
+        >
+          <TrashIcon />
+        </Button>
       </div>
     </div>
   );
@@ -310,6 +312,14 @@ export function MeetingView() {
     }
 
     setUploadError(null);
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setUploadError(
+        `"${file.name}" is ${formatSize(file.size)}, which exceeds the 20 MB limit.`,
+      );
+      return;
+    }
+
     setUploadProgress(0);
 
     uploadMeetingFile(token, meetingId, file, setUploadProgress)
@@ -489,7 +499,6 @@ export function MeetingView() {
                 <FileRow
                   key={file.id}
                   file={file}
-                  canDelete
                   isDeleting={deletingId === file.id}
                   onDownload={handleDownload}
                   onDelete={handleDelete}
