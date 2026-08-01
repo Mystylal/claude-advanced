@@ -273,6 +273,32 @@ describe('Meeting files (e2e)', () => {
       expect(response.text).toBe('hello world');
     });
 
+    it('encodes a non-ASCII file name in the content-disposition header', async () => {
+      const { token } = await registerAndGetToken();
+      const meeting = await createMeeting(token, ['participant@example.com']);
+      const meetingBody = meeting.body as MeetingResponseBody;
+
+      const uploaded = await request(app.getHttpServer())
+        .post(`/meetings/${meetingBody.id}/files`)
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', Buffer.from('hello world'), 'заметки встречи.txt');
+      const uploadedBody = uploaded.body as MeetingFileResponseBody;
+
+      const response = await downloadFile(
+        token,
+        meetingBody.id,
+        uploadedBody.id,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-disposition']).toContain(
+        `filename*=UTF-8''${encodeURIComponent('заметки встречи.txt')}`,
+      );
+      expect(response.headers['content-disposition']).toMatch(
+        /filename="[^"]*"/,
+      );
+    });
+
     it('lets a participant (non-owner) download the file content', async () => {
       const owner = await registerAndGetToken();
       const participant = await registerAndGetToken();

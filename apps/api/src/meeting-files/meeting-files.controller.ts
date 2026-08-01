@@ -31,6 +31,8 @@ import { MeetingFileRecord } from './interfaces/meeting-file-record.interface';
 import { MeetingFileResult } from './interfaces/meeting-file-result.interface';
 import { GetMeetingFileQuery } from './queries/impl/get-meeting-file.query';
 import { ListMeetingFilesQuery } from './queries/impl/list-meeting-files.query';
+import { buildAttachmentDisposition } from './util/build-content-disposition';
+import { decodeOriginalFilename } from './util/decode-original-filename';
 
 const STORAGE_DIR = join(process.cwd(), 'storage', 'meeting-files');
 
@@ -57,6 +59,8 @@ export class MeetingFilesController {
       }),
       limits: { fileSize: MAX_FILE_SIZE_BYTES },
       fileFilter: (_req, file, callback) => {
+        file.originalname = decodeOriginalFilename(file.originalname);
+
         if (!isAllowedMimeType(file.mimetype)) {
           callback(
             new UnsupportedMediaTypeException(
@@ -124,7 +128,7 @@ export class MeetingFilesController {
 
     return new StreamableFile(createReadStream(file.storagePath), {
       type: file.mimeType,
-      disposition: `attachment; filename="${encodeURIComponent(file.name)}"`,
+      disposition: buildAttachmentDisposition(file.name),
       length: file.size,
     });
   }
