@@ -1,5 +1,11 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import { MeetingView } from './meeting-view';
+
+const inter = Inter({
+  subsets: ['latin', 'cyrillic'],
+  variable: '--font-inter',
+});
 
 export const metadata: Metadata = {
   title: 'Meeting',
@@ -8,7 +14,9 @@ export const metadata: Metadata = {
 
 export default function MeetingPage() {
   return (
-    <main className="min-h-screen bg-linear-to-b from-white to-zinc-100">
+    <main
+      className={`${inter.variable} min-h-screen bg-linear-to-b from-white to-zinc-50 font-[family-name:var(--font-inter)]`}
+    >
       <MeetingView />
     </main>
   );

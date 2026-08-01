@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useRef, useState, useEffect } from 'react';
 import {
   Alert,
   Button,
   Card,
+  Chip,
   EmptyState,
   ProgressBar,
   Spinner,
@@ -52,6 +54,148 @@ function toErrorMessage(err: unknown): string {
     : 'Could not reach the server. Please try again.';
 }
 
+function ArrowLeftIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </svg>
+  );
+}
+
+function UploadCloudIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-6 w-6"
+      aria-hidden="true"
+    >
+      <path d="M12 13v8" />
+      <path d="m8 17 4-4 4 4" />
+      <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
+function AudioIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="M9 18V5l12-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="18" cy="16" r="3" />
+    </svg>
+  );
+}
+
+function VideoIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="m22 8-6 4 6 4V8Z" />
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+    </svg>
+  );
+}
+
+function DocumentIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+    </svg>
+  );
+}
+
+function FileTypeIcon({ mimeType }: { mimeType: string }) {
+  if (mimeType.startsWith('audio/')) {
+    return <AudioIcon />;
+  }
+  if (mimeType.startsWith('video/')) {
+    return <VideoIcon />;
+  }
+  return <DocumentIcon />;
+}
+
 function FileRow({
   file,
   canDelete,
@@ -66,25 +210,46 @@ function FileRow({
   onDelete: (file: MeetingFile) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-foreground/10 px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate font-medium">{file.name}</p>
-        <p className="text-sm text-foreground/60">
-          {file.mimeType} · {formatSize(file.size)} · uploaded{' '}
-          {formatDate(file.uploadedAt)} by {file.uploadedBy}
-        </p>
+    <div className="group flex items-center gap-4 rounded-xl border border-foreground/[0.06] bg-background px-4 py-3.5 transition-colors hover:border-foreground/10 hover:bg-foreground/[0.02]">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.04] text-foreground/50">
+        <FileTypeIcon mimeType={file.mimeType} />
       </div>
-      <div className="flex shrink-0 gap-2">
-        <Button variant="secondary" onPress={() => onDownload(file)}>
-          Download
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[0.925rem] font-medium tracking-tight">
+          {file.name}
+        </p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-foreground/50">
+          <span>{formatSize(file.size)}</span>
+          <span aria-hidden="true">·</span>
+          <span>{formatDate(file.uploadedAt)}</span>
+          <span aria-hidden="true">·</span>
+          <Chip size="sm" className="font-mono text-[0.7rem]">
+            {file.uploadedBy}
+          </Chip>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          isIconOnly
+          aria-label={`Download ${file.name}`}
+          onPress={() => onDownload(file)}
+        >
+          <DownloadIcon />
         </Button>
         {canDelete ? (
           <Button
-            variant="secondary"
+            variant="danger-soft"
+            size="sm"
+            isIconOnly
             isDisabled={isDeleting}
+            aria-label={`Delete ${file.name}`}
             onPress={() => onDelete(file)}
           >
-            {isDeleting ? 'Deleting…' : 'Delete'}
+            <TrashIcon />
           </Button>
         ) : null}
       </div>
@@ -199,7 +364,7 @@ export function MeetingView() {
 
   if (loadError) {
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-12">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-16">
         <Alert status="danger" role="alert">
           <Alert.Indicator />
           <Alert.Content>
@@ -219,20 +384,42 @@ export function MeetingView() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-12">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold">{meeting.title}</h1>
-        <p className="text-sm text-foreground/60">{formatDate(meeting.date)}</p>
-      </header>
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-16">
+      <div className="flex flex-col gap-6">
+        <Link
+          href="/"
+          className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-foreground/50 transition-colors hover:text-foreground"
+        >
+          <ArrowLeftIcon />
+          All meetings
+        </Link>
 
-      <Card>
-        <Card.Header>
-          <Card.Title>Meeting files</Card.Title>
-          <Card.Description>
+        <header className="flex flex-col gap-1.5">
+          <p className="text-xs font-semibold tracking-[0.14em] text-foreground/40 uppercase">
+            Meeting
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight text-balance">
+            {meeting.title}
+          </h1>
+          <p className="text-sm text-foreground/50">
+            {formatDate(meeting.date)}
+          </p>
+        </header>
+      </div>
+
+      <Card className="rounded-3xl border border-foreground/[0.07] px-2 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-16px_rgba(0,0,0,0.12)]">
+        <Card.Header className="gap-1 px-6 pt-6 pb-2">
+          <p className="text-xs font-semibold tracking-[0.14em] text-foreground/40 uppercase">
+            Files
+          </p>
+          <Card.Title className="text-lg font-semibold tracking-tight">
+            Meeting files
+          </Card.Title>
+          <Card.Description className="text-foreground/50">
             Recordings, transcripts, and documents attached to this meeting.
           </Card.Description>
         </Card.Header>
-        <Card.Content className="flex flex-col gap-4">
+        <Card.Content className="flex flex-col gap-4 px-6 pb-6">
           {uploadError ? (
             <Alert status="danger" role="alert">
               <Alert.Indicator />
@@ -251,7 +438,7 @@ export function MeetingView() {
             </Alert>
           ) : null}
 
-          <div className="flex items-center gap-4">
+          <div>
             <input
               ref={fileInputRef}
               type="file"
@@ -261,17 +448,28 @@ export function MeetingView() {
               disabled={uploadProgress !== null}
             />
             <Button
-              variant="secondary"
+              variant="outline"
+              fullWidth
               isDisabled={uploadProgress !== null}
               onPress={() => fileInputRef.current?.click()}
+              className="!h-auto flex-col gap-2 !rounded-2xl border-dashed !py-8 text-foreground/70 hover:text-foreground"
             >
-              {uploadProgress !== null ? 'Uploading…' : 'Upload file'}
+              <UploadCloudIcon />
+              <span className="flex flex-col items-center gap-0.5">
+                <span className="text-sm font-medium">
+                  {uploadProgress !== null
+                    ? 'Uploading…'
+                    : 'Click to upload a file'}
+                </span>
+                <span className="text-xs font-normal text-foreground/40">
+                  Audio, video, or documents · up to 20 MB
+                </span>
+              </span>
             </Button>
-            <p className="text-sm text-foreground/60">Max 20 MB.</p>
           </div>
 
           {uploadProgress !== null ? (
-            <ProgressBar value={uploadProgress}>
+            <ProgressBar value={uploadProgress} className="px-1">
               <ProgressBar.Output />
               <ProgressBar.Track>
                 <ProgressBar.Fill />
