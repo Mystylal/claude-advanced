@@ -1,12 +1,16 @@
-import { existsSync, mkdirSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync } from 'fs';
 import { extname, join } from 'path';
 import {
   BadRequestException,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Req,
+  StreamableFile,
+  UnsupportedMediaTypeException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -17,8 +21,15 @@ import { diskStorage } from 'multer';
 import { randomUUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { DeleteMeetingFileCommand } from './commands/impl/delete-meeting-file.command';
 import { UploadMeetingFileCommand } from './commands/impl/upload-meeting-file.command';
+import {
+  MAX_FILE_SIZE_BYTES,
+  isAllowedMimeType,
+} from './config/file-upload.constants';
+import { MeetingFileRecord } from './interfaces/meeting-file-record.interface';
 import { MeetingFileResult } from './interfaces/meeting-file-result.interface';
+import { GetMeetingFileQuery } from './queries/impl/get-meeting-file.query';
 import { ListMeetingFilesQuery } from './queries/impl/list-meeting-files.query';
 
 const STORAGE_DIR = join(process.cwd(), 'storage', 'meeting-files');
@@ -44,6 +55,20 @@ export class MeetingFilesController {
           callback(null, `${randomUUID()}${extname(file.originalname)}`);
         },
       }),
+      limits: { fileSize: MAX_FILE_SIZE_BYTES },
+      fileFilter: (_req, file, callback) => {
+        if (!isAllowedMimeType(file.mimetype)) {
+          callback(
+            new UnsupportedMediaTypeException(
+              `Unsupported file type: ${file.mimetype}`,
+            ),
+            false,
+          );
+          return;
+        }
+
+        callback(null, true);
+      },
     }),
   )
   upload(
@@ -76,6 +101,43 @@ export class MeetingFilesController {
         request.user.userId,
         request.user.email,
       ),
+    );
+  }
+
+  @Get(':fileId')
+  async download(
+    @Req() request: AuthenticatedRequest,
+    @Param('meetingId') meetingId: string,
+    @Param('fileId') fileId: string,
+  ): Promise<StreamableFile> {
+    const file = await this.queryBus.execute<
+      GetMeetingFileQuery,
+      MeetingFileRecord
+    >(
+      new GetMeetingFileQuery(
+        meetingId,
+        fileId,
+        request.user.userId,
+        request.user.email,
+      ),
+    );
+
+    return new StreamableFile(createReadStream(file.storagePath), {
+      type: file.mimeType,
+      disposition: `attachment; filename="${encodeURIComponent(file.name)}"`,
+      length: file.size,
+    });
+  }
+
+  @Delete(':fileId')
+  @HttpCode(204)
+  remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('meetingId') meetingId: string,
+    @Param('fileId') fileId: string,
+  ): Promise<void> {
+    return this.commandBus.execute(
+      new DeleteMeetingFileCommand(meetingId, fileId, request.user.userId),
     );
   }
 }
