@@ -1,9 +1,17 @@
 import { randomUUID } from 'crypto';
+import { readdirSync } from 'fs';
+import { join } from 'path';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+
+const STORAGE_DIR = join(process.cwd(), 'storage', 'meeting-files');
+
+function countStoredFiles(): number {
+  return readdirSync(STORAGE_DIR).length;
+}
 
 interface AuthResponseBody {
   accessToken: string;
@@ -142,6 +150,25 @@ describe('Meeting files (e2e)', () => {
       const response = await uploadFile(token, randomUUID());
 
       expect(response.status).toBe(404);
+    });
+
+    it('does not leave an orphaned file on disk when the upload is rejected', async () => {
+      const owner = await registerAndGetToken();
+      const outsider = await registerAndGetToken();
+      const meeting = await createMeeting(owner.token, [
+        'someone-else@example.com',
+      ]);
+      const meetingBody = meeting.body as MeetingResponseBody;
+
+      const filesBefore = countStoredFiles();
+
+      const forbidden = await uploadFile(outsider.token, meetingBody.id);
+      expect(forbidden.status).toBe(403);
+
+      const notFound = await uploadFile(owner.token, randomUUID());
+      expect(notFound.status).toBe(404);
+
+      expect(countStoredFiles()).toBe(filesBefore);
     });
   });
 

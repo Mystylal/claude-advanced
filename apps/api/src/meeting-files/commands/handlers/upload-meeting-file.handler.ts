@@ -1,3 +1,4 @@
+import { unlink } from 'fs/promises';
 import { CommandHandler, ICommandHandler, QueryBus } from '@nestjs/cqrs';
 import { GetMeetingByIdQuery } from '../../../meetings/queries/impl/get-meeting-by-id.query';
 import { MeetingResult } from '../../../meetings/interfaces/meeting-result.interface';
@@ -22,32 +23,40 @@ export class UploadMeetingFileHandler implements ICommandHandler<
     email,
     file,
   }: UploadMeetingFileCommand): Promise<MeetingFileResult> {
-    const meeting = await this.queryBus.execute<
-      GetMeetingByIdQuery,
-      MeetingResult
-    >(new GetMeetingByIdQuery(meetingId));
+    try {
+      const meeting = await this.queryBus.execute<
+        GetMeetingByIdQuery,
+        MeetingResult
+      >(new GetMeetingByIdQuery(meetingId));
 
-    assertMeetingAccess(meeting, userId, email);
+      assertMeetingAccess(meeting, userId, email);
 
-    return this.prisma.meetingFile.create({
-      data: {
-        meetingId,
-        name: file.originalname,
-        mimeType: file.mimetype,
-        size: file.size,
-        storagePath: file.path,
-        uploadedBy: userId,
-      },
-      select: {
-        id: true,
-        meetingId: true,
-        name: true,
-        mimeType: true,
-        size: true,
-        uploadedBy: true,
-        uploadedAt: true,
-        status: true,
-      },
-    });
+      return await this.prisma.meetingFile.create({
+        data: {
+          meetingId,
+          name: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          storagePath: file.path,
+          uploadedBy: userId,
+        },
+        select: {
+          id: true,
+          meetingId: true,
+          name: true,
+          mimeType: true,
+          size: true,
+          uploadedBy: true,
+          uploadedAt: true,
+          status: true,
+        },
+      });
+    } catch (error) {
+      // multer's diskStorage has already written the file by the time this
+      // handler runs, so a rejected/failed upload must clean it up itself
+      // or it leaks orphaned files on every 403/404.
+      await unlink(file.path).catch(() => undefined);
+      throw error;
+    }
   }
 }
