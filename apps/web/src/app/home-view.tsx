@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Chip, EmptyState, Spinner } from '@heroui/react';
@@ -15,19 +16,24 @@ function formatDate(value: string): string {
 
 function MeetingCard({ meeting }: { meeting: Meeting }) {
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title>{meeting.title}</Card.Title>
-        <Card.Description>{formatDate(meeting.date)}</Card.Description>
-      </Card.Header>
-      <Card.Content>
-        <div className="flex flex-wrap gap-2">
-          {meeting.participants.map((participant) => (
-            <Chip key={participant}>{participant}</Chip>
-          ))}
-        </div>
-      </Card.Content>
-    </Card>
+    <Link
+      href={`/meetings/${meeting.id}`}
+      className="block rounded-2xl transition-opacity hover:opacity-80"
+    >
+      <Card>
+        <Card.Header>
+          <Card.Title>{meeting.title}</Card.Title>
+          <Card.Description>{formatDate(meeting.date)}</Card.Description>
+        </Card.Header>
+        <Card.Content>
+          <div className="flex flex-wrap gap-2">
+            {meeting.participants.map((participant) => (
+              <Chip key={participant}>{participant}</Chip>
+            ))}
+          </div>
+        </Card.Content>
+      </Card>
+    </Link>
   );
 }
 
